@@ -11,8 +11,21 @@
 #include <net/tcp.h>
 #include <net/bpf_sk_storage.h>
 
+
 /* "extern" is to avoid sparse warning.  It is only used in bpf_struct_ops.c. */
 extern struct bpf_struct_ops bpf_tcp_congestion_ops;
+
+static u32 optional_ops[] = {
+	offsetof(struct tcp_congestion_ops, init),
+	offsetof(struct tcp_congestion_ops, release),
+	offsetof(struct tcp_congestion_ops, set_state),
+	offsetof(struct tcp_congestion_ops, cwnd_event),
+	offsetof(struct tcp_congestion_ops, in_ack_event),
+	offsetof(struct tcp_congestion_ops, pkts_acked),
+	offsetof(struct tcp_congestion_ops, tso_segs),
+	offsetof(struct tcp_congestion_ops, sndbuf_expand),
+	offsetof(struct tcp_congestion_ops, cong_control),
+};
 
 static u32 unsupported_ops[] = {
 	offsetof(struct tcp_congestion_ops, get_info),
