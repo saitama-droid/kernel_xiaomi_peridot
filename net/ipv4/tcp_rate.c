@@ -89,8 +89,10 @@ void tcp_rate_skb_delivered(struct sock *sk, struct sk_buff *skb,
 
 	tx_tstamp = tcp_skb_timestamp_us(skb);
 	if (!rs->prior_delivered ||
-	    tcp_skb_sent_after(tx_tstamp, tp->first_tx_mstamp,
-			       scb->end_seq, rs->last_end_seq)) {
+	    after(scb->tx.delivered, rs->prior_delivered) ||
+	    (scb->tx.delivered == rs->prior_delivered &&
+	     tcp_skb_sent_after(tx_tstamp, tp->first_tx_mstamp,
+				scb->end_seq, rs->last_end_seq))) {
 		rs->prior_delivered_ce  = scb->tx.delivered_ce;
 		rs->prior_delivered  = scb->tx.delivered;
 		rs->prior_mstamp     = scb->tx.delivered_mstamp;
