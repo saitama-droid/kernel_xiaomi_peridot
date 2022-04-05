@@ -471,7 +471,9 @@ static void cubictcp_acked(struct sock *sk, const struct ack_sample *sample)
 	if (ca->delay_min == 0 || ca->delay_min > delay)
 		ca->delay_min = delay;
 
-	if (!ca->found && tcp_in_slow_start(tp) && hystart)
+	/* hystart triggers when cwnd is larger than some threshold */
+	if (!ca->found && tcp_in_slow_start(tp) && hystart &&
+	    tcp_snd_cwnd(tp) >= hystart_low_window)
 		hystart_update(sk, delay);
 }
 

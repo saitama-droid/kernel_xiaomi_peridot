@@ -916,7 +916,7 @@ static void tcp_update_pacing_rate(struct sock *sk)
 	 *	 end of slow start and should slow down.
 	 */
 	if (tcp_snd_cwnd(tp) < tp->snd_ssthresh / 2)
-		rate *= READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_pacing_ss_ratio);
+		rate *= sock_net(sk)->ipv4.sysctl_tcp_pacing_ss_ratio;
 	else
 		rate *= READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_pacing_ca_ratio);
 
@@ -2781,7 +2781,7 @@ static void tcp_mtup_probe_success(struct sock *sk)
 
 	val = (u64)tcp_snd_cwnd(tp) * tcp_mss_to_mtu(sk, tp->mss_cache);
 	do_div(val, icsk->icsk_mtup.probe_size);
-	DEBUG_NET_WARN_ON_ONCE((u32)val != val);
+	WARN_ON_ONCE((u32)val != val);
 	tcp_snd_cwnd_set(tp, max_t(u32, 1U, val));
 
 	tp->snd_cwnd_cnt = 0;
