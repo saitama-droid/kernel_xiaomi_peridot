@@ -678,6 +678,14 @@ config TCP_CONG_BBR
 	  AQM schemes that do not provide a delay signal. It requires the fq
 	  ("Fair Queue") pacing packet scheduler.
 
+config TCP_CONG_BBRPLUS
+	tristate "BBRPlus TCP"
+	default n
+	help
+
+      BBRPlus is a modification of Google's BBR congestion control algorithm
+      with more aggressive bandwidth probing and loss handling.
+
 choice
 	prompt "Default TCP congestion control"
 	default DEFAULT_CUBIC
@@ -715,6 +723,9 @@ choice
 	config DEFAULT_BBR
 		bool "BBR" if TCP_CONG_BBR=y
 
+	config DEFAULT_BBRPLUS
+		bool "BBRPlus" if TCP_CONG_BBRPLUS=y
+
 	config DEFAULT_RENO
 		bool "Reno"
 endchoice
@@ -739,6 +750,7 @@ config DEFAULT_TCP_CONG
 	default "dctcp" if DEFAULT_DCTCP
 	default "cdg" if DEFAULT_CDG
 	default "bbr" if DEFAULT_BBR
+	default "bbrplus" if DEFAULT_BBRPLUS
 	default "cubic"
 
 config TCP_MD5SIG
