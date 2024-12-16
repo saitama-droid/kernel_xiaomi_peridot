@@ -449,6 +449,9 @@ struct kvm_vcpu_arch {
 	u64 hcr_el2;
 	u64 mdcr_el2;
 
+	/* DO NOT USE: Removed upstream. Kept to not break the KMI. */
+	u64 cptr_el2;
+
 	/* Values of trap registers for the host before guest entry. */
 	u64 mdcr_el2_host;
 

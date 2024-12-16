@@ -228,7 +228,6 @@ static void pvm_init_trap_regs(struct kvm_vcpu *vcpu)
  */
 static void pkvm_vcpu_init_traps(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
-	hyp_vcpu->vcpu.arch.cptr_el2 = CPTR_EL2_DEFAULT;
 	hyp_vcpu->vcpu.arch.mdcr_el2 = 0;
 
 	if (!pkvm_hyp_vcpu_is_protected(hyp_vcpu)) {

@@ -38,50 +38,40 @@ extern void kvm_nvhe_prepare_backtrace(unsigned long fp, unsigned long pc);
 
 static void __activate_cptr_traps(struct kvm_vcpu *vcpu)
 {
-	u64 val = CPTR_EL2_TAM;	/* Same bit irrespective of E2H */
-
-	___activate_traps(vcpu);
-	__activate_traps_common(vcpu);
-
-	val = vcpu->arch.cptr_el2;
-	val |= CPTR_EL2_TTA | CPTR_EL2_TAM;
-	if (!guest_owns_fp_regs(vcpu)) {
-		val |= CPTR_EL2_TFP | CPTR_EL2_TZ;
-		__activate_traps_fpsimd32(vcpu);
+	u64 val = CPTR_EL2_TAM; /* Same bit irrespective of E2H */
 
 	/* !hVHE case upstream */
-	if (1) {
-		val |= CPTR_EL2_TTA | CPTR_NVHE_EL2_RES1;
+	val |= CPTR_EL2_TTA | CPTR_NVHE_EL2_RES1;
 
-		/*
-		 * Always trap SME since it's not supported in KVM.
-		 * TSM is RES1 if SME isn't implemented.
-		 */
-		val |= CPTR_EL2_TSM;
+	/*
+	 * Always trap SME since it's not supported in KVM.
+	 * TSM is RES1 if SME isn't implemented.
+	 */
+	val |= CPTR_EL2_TSM;
 
-		if (!vcpu_has_sve(vcpu) || !guest_owns_fp_regs(vcpu))
-			val |= CPTR_EL2_TZ;
+	if (!vcpu_has_sve(vcpu) || !guest_owns_fp_regs(vcpu))
+		val |= CPTR_EL2_TZ;
 
-		if (!guest_owns_fp_regs(vcpu))
-			val |= CPTR_EL2_TFP;
+	if (!guest_owns_fp_regs(vcpu))
+		val |= CPTR_EL2_TFP;
 
-		write_sysreg(val, cptr_el2);
-	}
+	if (!guest_owns_fp_regs(vcpu))
+		__activate_traps_fpsimd32(vcpu);
+
+	write_sysreg(val, cptr_el2);
 }
 
 static void __deactivate_cptr_traps(struct kvm_vcpu *vcpu)
 {
 	/* !hVHE case upstream */
-	if (1) {
-		u64 val = CPTR_NVHE_EL2_RES1;
+	u64 val = CPTR_NVHE_EL2_RES1;
 
-		if (!cpus_have_final_cap(ARM64_SVE))
-			val |= CPTR_EL2_TZ;
-		if (!cpus_have_final_cap(ARM64_SME))
-			val |= CPTR_EL2_TSM;
+	if (!cpus_have_final_cap(ARM64_SVE))
+		val |= CPTR_EL2_TZ;
+	if (!cpus_have_final_cap(ARM64_SME))
+		val |= CPTR_EL2_TSM;
 
-		write_sysreg(val, cptr_el2);
-	}
+	write_sysreg(val, cptr_el2);
 }
 
 static void __activate_traps(struct kvm_vcpu *vcpu)
