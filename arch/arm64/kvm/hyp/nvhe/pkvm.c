@@ -32,6 +32,39 @@ unsigned int kvm_host_sve_max_vl;
  * protected KVM is enabled, but for both protected and non-protected VMs.
  */
 static DEFINE_PER_CPU(struct pkvm_hyp_vcpu *, loaded_hyp_vcpu);
+
+/*
+ * Host fp state for all cpus. This could include the host simd state, as well
+ * as the sve and sme states if supported. Written to when the guest accesses
+ * its own FPSIMD state, and read when the guest state is live and we need to
+ * switch back to the host.
+ *
+ * Only valid when (fp_state == FP_STATE_GUEST_OWNED) in the hyp vCPU structure.
+ */
+unsigned long __ro_after_init kvm_arm_hyp_host_fp_state[NR_CPUS];
+
+static void *__get_host_fpsimd_bytes(void)
+{
+	/*
+	 * The addresses in this array have been converted to hyp addresses
+	 * in finalize_init_hyp_mode().
+	 */
+	return (void *)kvm_arm_hyp_host_fp_state[hyp_smp_processor_id()];
+}
+
+struct user_fpsimd_state *get_host_fpsimd_state(struct kvm_vcpu *vcpu)
+{
+	WARN_ON(system_supports_sve());
+	return __get_host_fpsimd_bytes();
+}
+
+struct kvm_host_sve_state *get_host_sve_state(struct kvm_vcpu *vcpu)
+{
+	WARN_ON(!system_supports_sve());
+	WARN_ON(!is_protected_kvm_enabled());
+	return __get_host_fpsimd_bytes();
+}
+
 /*
  * Set trap register values based on features in ID_AA64PFR0.
  */
