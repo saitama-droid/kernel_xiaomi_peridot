@@ -60,6 +60,12 @@
  */
 #define USB_SS_PORT_U0_WAKE_TIME	200  /* ms */
 
+/*
+ * Give SS hubs 200ms time after wake to train downstream links before
+ * assuming no port activity and allowing hub to runtime suspend back.
+ */
+#define USB_SS_PORT_U0_WAKE_TIME	200  /* ms */
+
 /* Protect struct usb_device->state and ->children members
  * Note: Both are also protected by ->dev.sem, except that ->state can
  * change to USB_STATE_NOTATTACHED even when the semaphore isn't held. */
@@ -1024,11 +1030,12 @@ int usb_remove_device(struct usb_device *udev)
 
 enum hub_activation_type {
 	HUB_INIT, HUB_INIT2, HUB_INIT3,		/* INITs must come first */
-	HUB_POST_RESET, HUB_RESUME, HUB_RESET_RESUME,
+	HUB_POST_RESET, HUB_RESUME, HUB_RESET_RESUME, HUB_POST_RESUME,
 };
 
 static void hub_init_func2(struct work_struct *ws);
 static void hub_init_func3(struct work_struct *ws);
+static void hub_post_resume(struct work_struct *ws);
 
 static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 {
@@ -1050,6 +1057,12 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 		if (type == HUB_INIT2)
 			goto init2;
 		goto init3;
+	}
+
+	if (type == HUB_POST_RESUME) {
+		usb_autopm_put_interface_async(to_usb_interface(hub->intfdev));
+		hub_put(hub);
+		return;
 	}
 
 	hub_get(hub);
@@ -1302,12 +1315,11 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 
 	if (type == HUB_RESUME && hub_is_superspeed(hub->hdev)) {
 		/* give usb3 downstream links training time after hub resume */
-		usb_autopm_get_interface_no_resume(
-			to_usb_interface(hub->intfdev));
-
 		INIT_DELAYED_WORK(&hub->init_work, hub_post_resume);
 		queue_delayed_work(system_power_efficient_wq, &hub->init_work,
 				   msecs_to_jiffies(USB_SS_PORT_U0_WAKE_TIME));
+		usb_autopm_get_interface_no_resume(
+			to_usb_interface(hub->intfdev));
 		return;
 	}
 
@@ -1331,10 +1343,9 @@ static void hub_init_func3(struct work_struct *ws)
 
 static void hub_post_resume(struct work_struct *ws)
 {
-	struct usb_hub *hub = container_of(ws, struct usb_hub, post_resume_work.work);
+	struct usb_hub *hub = container_of(ws, struct usb_hub, init_work.work);
 
-	usb_autopm_put_interface_async(to_usb_interface(hub->intfdev));
-	hub_put(hub);
+	hub_activate(hub, HUB_POST_RESUME);
 }
 
 enum hub_quiescing_type {
