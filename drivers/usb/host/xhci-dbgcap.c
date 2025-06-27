@@ -629,7 +629,7 @@ static int xhci_dbc_start(struct xhci_dbc *dbc)
 static void xhci_dbc_stop(struct xhci_dbc *dbc)
 {
 	int ret;
-	unsigned long		flags;
+	unsigned long flags;
 
 	WARN_ON(!dbc);
 
@@ -638,12 +638,17 @@ static void xhci_dbc_stop(struct xhci_dbc *dbc)
 		return;
 	case DS_CONFIGURED:
 	case DS_STALLED:
+		spin_lock(&dbc->lock);
+		xhci_dbc_flush_requests(dbc);
+		spin_unlock(&dbc->lock);
+
 		if (dbc->driver->disconnect)
 			dbc->driver->disconnect(dbc);
 		break;
 	default:
 		break;
 	}
+}
 
 	cancel_delayed_work_sync(&dbc->event_work);
 
