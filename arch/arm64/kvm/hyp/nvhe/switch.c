@@ -43,7 +43,10 @@ static void __activate_cptr_traps(struct kvm_vcpu *vcpu)
 	___activate_traps(vcpu);
 	__activate_traps_common(vcpu);
 
-	if (!guest_owns_fp_regs(vcpu))
+	val = vcpu->arch.cptr_el2;
+	val |= CPTR_EL2_TTA | CPTR_EL2_TAM;
+	if (!guest_owns_fp_regs(vcpu)) {
+		val |= CPTR_EL2_TFP | CPTR_EL2_TZ;
 		__activate_traps_fpsimd32(vcpu);
 
 	/* !hVHE case upstream */
