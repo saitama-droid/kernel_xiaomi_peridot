@@ -780,57 +780,64 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	/* Give the controller some time to get ready to receive the NVM */
 	msleep(10);
 
-	/* Download NVM configuration */
-	config.type = TLV_TYPE_NVM;
-	if (firmware_name)
-		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/%s", firmware_name);
-	else if (qca_is_wcn399x(soc_type)) {
-		if (ver.soc_id == QCA_WCN3991_SOC_ID) {
-			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/crnv%02xu.bin", rom_ver);
-		} else {
-			qca_read_fw_board_id(hdev, &boardid);
-			qca_get_nvm_name_by_board(config.fwname, sizeof(config.fwname),
-				 firmware_name, soc_type, ver, 0, boardid);
-		}
-	} else {
-		switch (soc_type) {
-		case QCA_WCN3990:
-		case QCA_WCN3991:
-		case QCA_WCN3998:
-			if (le32_to_cpu(ver.soc_id) == QCA_WCN3991_SOC_ID)
-				variant = "u";
+/* Download NVM configuration */
+config.type = TLV_TYPE_NVM;
 
-			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/crnv%02x%s.bin", rom_ver, variant);
-			break;
-		case QCA_WCN3988:
-			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/crnv%02x.bin", rom_ver);
-		}
+if (firmware_name) {
+	snprintf(config.fwname, sizeof(config.fwname),
+		 "qca/%s", firmware_name);
+
+} else if (qca_is_wcn399x(soc_type)) {
+	if (ver.soc_id == QCA_WCN3991_SOC_ID) {
+		snprintf(config.fwname, sizeof(config.fwname),
+			 "qca/crnv%02xu.bin", rom_ver);
+	} else {
+		/* Fallback legacy naming for WCN399x without board-id */
+		snprintf(config.fwname, sizeof(config.fwname),
+			 "qca/crnv%02x.bin", rom_ver);
 	}
-	else if (soc_type == QCA_QCA6390)
+
+} else {
+	switch (soc_type) {
+	case QCA_WCN3990:
+	case QCA_WCN3991:
+	case QCA_WCN3998:
+		if (le32_to_cpu(ver.soc_id) == QCA_WCN3991_SOC_ID)
+			variant = "u";
+
+		snprintf(config.fwname, sizeof(config.fwname),
+			 "qca/crnv%02x%s.bin", rom_ver, variant);
+		break;
+
+	/* keep only enums actually present in btqca.h */
+	case QCA_QCA6390:
 		snprintf(config.fwname, sizeof(config.fwname),
 			 "qca/htnv%02x.bin", rom_ver);
-	else if (soc_type == QCA_WCN6750)
+		break;
+
+	case QCA_WCN6750:
 		snprintf(config.fwname, sizeof(config.fwname),
 			 "qca/msnv%02x.bin", rom_ver);
-	else
+		break;
+
+	default:
 		snprintf(config.fwname, sizeof(config.fwname),
 			 "qca/nvm_%08x.bin", soc_ver);
+		break;
+	}
+}
 
-	err = qca_download_firmware(hdev, &config, soc_type, rom_ver);
-	if (err < 0) {
-		bt_dev_err(hdev, "QCA Failed to download NVM (%d)", err);
+err = qca_download_firmware(hdev, &config, soc_type, rom_ver);
+if (err < 0) {
+	bt_dev_err(hdev, "QCA Failed to download NVM (%d)", err);
+	return err;
+}
+
+if (soc_type >= QCA_WCN3991) {
+	err = qca_disable_soc_logging(hdev);
+	if (err < 0)
 		return err;
-	}
-
-	if (soc_type >= QCA_WCN3991) {
-		err = qca_disable_soc_logging(hdev);
-		if (err < 0)
-			return err;
-	}
+}
 
 	/* WCN399x and WCN6750 supports the Microsoft vendor extension with 0xFD70 as the
 	 * VsMsftOpCode.
