@@ -59,18 +59,6 @@ static void display_openssl_errors(int l)
 	}
 }
 
-#ifndef OPENSSL_IS_BORINGSSL
-static void drain_openssl_errors(void)
-{
-	const char *file;
-	int line;
-
-	if (ERR_peek_error() == 0)
-		return;
-	while (ERR_get_error_line(&file, &line)) {}
-}
-#endif
-
 #define ERR(cond, fmt, ...)				\
 	do {						\
 		bool __cond = (cond);			\
