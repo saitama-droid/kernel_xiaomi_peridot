@@ -32,42 +32,6 @@ unsigned int kvm_host_sve_max_vl;
  * protected KVM is enabled, but for both protected and non-protected VMs.
  */
 static DEFINE_PER_CPU(struct pkvm_hyp_vcpu *, loaded_hyp_vcpu);
-
-/*
- * Host fp state for all cpus. This could include the host simd state, as well
- * as the sve and sme states if supported. Written to when the guest accesses
- * its own FPSIMD state, and read when the guest state is live and we need to
- * switch back to the host.
- *
- * Only valid when (fp_state == FP_STATE_GUEST_OWNED) in the hyp vCPU structure.
- */
-unsigned long __ro_after_init kvm_arm_hyp_host_fp_state[NR_CPUS];
-
-static void *__get_host_fpsimd_bytes(void)
-{
-	/*
-	 * The addresses in this array have been converted to hyp addresses
-	 * in finalize_init_hyp_mode().
-	 */
-	return (void *)kvm_arm_hyp_host_fp_state[hyp_smp_processor_id()];
-}
-
-struct user_fpsimd_state *get_host_fpsimd_state(struct kvm_vcpu *vcpu)
-{
-	if (likely(!is_protected_kvm_enabled()))
-		return vcpu->arch.host_fpsimd_state;
-
-	WARN_ON(system_supports_sve());
-	return __get_host_fpsimd_bytes();
-}
-
-struct kvm_host_sve_state *get_host_sve_state(struct kvm_vcpu *vcpu)
-{
-	WARN_ON(!system_supports_sve());
-	WARN_ON(!is_protected_kvm_enabled());
-	return __get_host_fpsimd_bytes();
-}
-
 /*
  * Set trap register values based on features in ID_AA64PFR0.
  */
@@ -76,7 +40,6 @@ static void pvm_init_traps_aa64pfr0(struct kvm_vcpu *vcpu)
 	const u64 feature_ids = pvm_read_id_reg(vcpu, SYS_ID_AA64PFR0_EL1);
 	u64 hcr_set = HCR_RW;
 	u64 hcr_clear = 0;
-	u64 cptr_set = 0;
 
 	/* Protected KVM does not support AArch32 guests. */
 	BUILD_BUG_ON(FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_EL0),
@@ -103,16 +66,10 @@ static void pvm_init_traps_aa64pfr0(struct kvm_vcpu *vcpu)
 	/* Trap AMU */
 	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_AMU), feature_ids)) {
 		hcr_clear |= HCR_AMVOFFEN;
-		cptr_set |= CPTR_EL2_TAM;
 	}
-
-	/* Trap SVE */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_SVE), feature_ids))
-		cptr_set |= CPTR_EL2_TZ;
 
 	vcpu->arch.hcr_el2 |= hcr_set;
 	vcpu->arch.hcr_el2 &= ~hcr_clear;
-	vcpu->arch.cptr_el2 |= cptr_set;
 }
 
 /*
@@ -142,7 +99,6 @@ static void pvm_init_traps_aa64dfr0(struct kvm_vcpu *vcpu)
 	const u64 feature_ids = pvm_read_id_reg(vcpu, SYS_ID_AA64DFR0_EL1);
 	u64 mdcr_set = 0;
 	u64 mdcr_clear = 0;
-	u64 cptr_set = 0;
 
 	/* Trap/constrain PMU */
 	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer), feature_ids)) {
@@ -169,13 +125,8 @@ static void pvm_init_traps_aa64dfr0(struct kvm_vcpu *vcpu)
 	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_TraceFilt), feature_ids))
 		mdcr_set |= MDCR_EL2_TTRF;
 
-	/* Trap Trace */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_TraceVer), feature_ids))
-		cptr_set |= CPTR_EL2_TTA;
-
 	vcpu->arch.mdcr_el2 |= mdcr_set;
 	vcpu->arch.mdcr_el2 &= ~mdcr_clear;
-	vcpu->arch.cptr_el2 |= cptr_set;
 }
 
 /*
@@ -220,6 +171,10 @@ static void pvm_init_trap_regs(struct kvm_vcpu *vcpu)
 	 */
 	vcpu->arch.hcr_el2 = HCR_GUEST_FLAGS |
 			     HCR_TID3 | HCR_TACR | HCR_TIDCP | HCR_TID1;
+
+	/* Clear res0 and set res1 bits to trap potential new features. */
+	vcpu->arch.hcr_el2 &= ~(HCR_RES0);
+	vcpu->arch.mdcr_el2 &= ~(MDCR_EL2_RES0);
 
 	if (cpus_have_const_cap(ARM64_HAS_RAS_EXTN)) {
 		/* route synchronous external abort exceptions to EL2 */

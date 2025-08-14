@@ -563,35 +563,33 @@ static int dwc3_gadget_set_xfer_resource(struct dwc3_ep *dep)
  */
 static int dwc3_gadget_start_config(struct dwc3_ep *dep)
 {
-	struct dwc3_gadget_ep_cmd_params params;
-	struct dwc3		*dwc;
-	u32			cmd;
-	int			i;
-	int			ret;
+    struct dwc3_gadget_ep_cmd_params params;
+    struct dwc3 *dwc;
+    u32 cmd;
+    int i, ret;
+    struct dwc3_ep *iter_dep;
 
-	if (dep->number)
-		return 0;
+    if (dep->number)
+        return 0;
 
-	memset(&params, 0x00, sizeof(params));
-	cmd = DWC3_DEPCMD_DEPSTARTCFG;
-	dwc = dep->dwc;
+    memset(&params, 0x00, sizeof(params));
+    cmd = DWC3_DEPCMD_DEPSTARTCFG;
+    dwc = dep->dwc;
 
-	ret = dwc3_send_gadget_ep_cmd(dep, cmd, &params);
-	if (ret)
-		return ret;
+    ret = dwc3_send_gadget_ep_cmd(dep, cmd, &params);
+    if (ret)
+        return ret;
 
-	for (i = 0; i < DWC3_ENDPOINTS_NUM; i++) {
-		struct dwc3_ep *dep = dwc->eps[i];
+    /* Reset resource allocation flags */
+    for (i = resource_index; i < dwc->num_eps; i++) {
+        iter_dep = dwc->eps[i];
+        if (!iter_dep)
+            continue;
 
-		if (!dep)
-			continue;
+        iter_dep->flags &= ~DWC3_EP_RESOURCE_ALLOCATED;
+    }
 
-		ret = dwc3_gadget_set_xfer_resource(dep);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
+    return 0;
 }
 
 static int dwc3_gadget_set_ep_config(struct dwc3_ep *dep, unsigned int action)
@@ -738,9 +736,11 @@ void dwc3_gadget_clear_tx_fifos(struct dwc3 *dwc)
 
 	dwc->last_fifo_depth = fifo_depth;
 	/* Clear existing TXFIFO for all IN eps except ep0 */
-	for (num = 3; num < min_t(int, dwc->num_eps, DWC3_ENDPOINTS_NUM);
-	     num += 2) {
+	for (num = 3; num < min_t(int, dwc->num_eps, DWC3_ENDPOINTS_NUM); num += 2) {
 		dep = dwc->eps[num];
+		if (!dep)
+			continue;
+
 		/* Don't change TXFRAMNUM on usb31 version */
 		size = DWC3_IP_IS(DWC3) ? 0 :
 			dwc3_readl(dwc->regs, DWC3_GTXFIFOSIZ(num >> 1)) &
@@ -3499,6 +3499,8 @@ out:
 
 		for (i = 0; i < DWC3_ENDPOINTS_NUM; i++) {
 			dep = dwc->eps[i];
+			if (!dep)
+				continue;
 
 			if (!(dep->flags & DWC3_EP_ENABLED))
 				continue;
@@ -3687,6 +3689,10 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 	u8			epnum = event->endpoint_number;
 
 	dep = dwc->eps[epnum];
+	if (!dep) {
+		dev_warn(dwc->dev, "spurious event, endpoint %u is not allocated\n", epnum);
+		return;
+	}
 
 	if (!(dep->flags & DWC3_EP_ENABLED)) {
 		if ((epnum > 1) && !(dep->flags & DWC3_EP_TRANSFER_STARTED))
@@ -4373,6 +4379,12 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	count &= DWC3_GEVNTCOUNT_MASK;
 	if (!count)
 		return IRQ_NONE;
+
+	if (count > evt->length) {
+		dev_err_ratelimited(dwc->dev, "invalid count(%u) > evt->length(%u)\n",
+			count, evt->length);
+		return IRQ_NONE;
+	}
 
 	evt->count = count;
 	evt->flags |= DWC3_EVENT_PENDING;
